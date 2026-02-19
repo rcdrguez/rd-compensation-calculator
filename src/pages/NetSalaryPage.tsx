@@ -4,8 +4,11 @@ import { Input } from '@/ui/components/Input';
 import { computeNet } from '@/domain/rd/engine/computeNet';
 import { loadConfigState, resolveActiveConfig } from '@/domain/rd/config/store';
 import { money } from '@/ui/lib/utils';
-import { extractFromText } from '@/ai/extract/rulesFallback';
 import { Button } from '@/ui/components/Button';
+import { computeNotice } from '@/domain/rd/engine/computeNotice';
+import { computeRegalia } from '@/domain/rd/engine/computeRegalia';
+import { computeSeverance } from '@/domain/rd/engine/computeSeverance';
+import { computeVacations } from '@/domain/rd/engine/computeVacations';
 
 type Benefit = {
   id: string;
@@ -19,11 +22,15 @@ const defaultBenefits: Benefit[] = [
   { id: crypto.randomUUID(), name: 'Subsidio de internet', amount: 2500, taxable: false }
 ];
 
+const monthNames = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+
 export function NetSalaryPage() {
   const config = useMemo(() => resolveActiveConfig(loadConfigState()), []);
   const [gross, setGross] = useState(85000);
-  const [text, setText] = useState('');
   const [benefits, setBenefits] = useState<Benefit[]>(defaultBenefits);
+  const [startDate, setStartDate] = useState('2022-01-01');
+  const [endDate, setEndDate] = useState(new Date().toISOString().slice(0, 10));
+  const [pendingVacationDays, setPendingVacationDays] = useState(8);
 
   const taxableBenefits = benefits.filter((item) => item.taxable).reduce((total, item) => total + item.amount, 0);
   const nonTaxableBenefits = benefits.filter((item) => !item.taxable).reduce((total, item) => total + item.amount, 0);
@@ -36,15 +43,47 @@ export function NetSalaryPage() {
     config
   });
 
+  const monthlyRows = monthNames.map((month) => ({
+    month,
+    grossIncome: result.monthlyGross,
+    taxableExtras: result.taxableExtrasMonthly,
+    nonTaxableExtras: result.nonTaxableBenefitsMonthly,
+    tss: result.tss.total,
+    isr: result.monthlyISR,
+    net: result.monthlyNet
+  }));
+
+  const tenureMonths = Math.max(1, (new Date(endDate).getTime() - new Date(startDate).getTime()) / (1000 * 60 * 60 * 24 * 30.4));
+  const noticeAmount = computeNotice(tenureMonths, gross, config, false);
+  const severanceAmount = computeSeverance(tenureMonths, gross, config);
+  const vacations = computeVacations({
+    monthlySalary: gross,
+    pendingDays: pendingVacationDays,
+    entitlementDays: config.labor.vacationDaysPerYear
+  });
+  const regaliaAmount = computeRegalia(gross, Math.min(12, tenureMonths % 12 || 12), config.labor.regaliaMonthFactor);
+  const resignationEstimate = vacations.amount + regaliaAmount;
+  const dismissalEstimate = resignationEstimate + noticeAmount + severanceAmount;
+
   return (
-    <div className="grid gap-4 lg:grid-cols-[1.2fr_1fr]">
+    <div className="space-y-4">
       <Card>
         <h2 className="text-lg font-semibold">Calculadora de neto</h2>
-        <p className="mb-4 text-sm text-muted-foreground">Visualiza un desglose claro de descuentos, impuestos y beneficios gravados/no gravados.</p>
+        <p className="mb-4 text-sm text-muted-foreground">Vista tipo tablero: entiende rápido cuánto ganas, cuánto descuentan y cuánto recibes mes por mes.</p>
 
-        <div className="rounded-lg border border-border bg-muted/20 p-3">
-          <label className="text-sm font-medium">Salario bruto mensual</label>
-          <Input type="number" value={gross} onChange={(e) => setGross(Number(e.target.value) || 0)} />
+        <div className="grid gap-3 md:grid-cols-3">
+          <div className="rounded-lg border border-border bg-muted/20 p-3">
+            <label className="text-sm font-medium">Salario bruto mensual</label>
+            <Input type="number" value={gross} onChange={(e) => setGross(Number(e.target.value) || 0)} />
+          </div>
+          <div className="rounded-lg border border-border bg-muted/20 p-3">
+            <p className="text-xs uppercase text-muted-foreground">Neto mensual estimado</p>
+            <p className="mt-2 text-2xl font-semibold text-primary">{money(result.monthlyNet)}</p>
+          </div>
+          <div className="rounded-lg border border-border bg-muted/20 p-3">
+            <p className="text-xs uppercase text-muted-foreground">Ingreso neto anual</p>
+            <p className="mt-2 text-2xl font-semibold">{money(result.annualNet)}</p>
+          </div>
         </div>
 
         <div className="mt-4 space-y-3">
@@ -89,45 +128,45 @@ export function NetSalaryPage() {
             </div>
           ))}
         </div>
+      </Card>
 
-        <div className="mt-4 overflow-x-auto rounded-lg border border-border">
+      <Card>
+        <div className="mb-3 flex items-center justify-between">
+          <h3 className="font-semibold">Detalle de ingresos y descuentos por mes</h3>
+          <p className="text-sm text-muted-foreground">12 meses del año fiscal</p>
+        </div>
+        <div className="overflow-x-auto rounded-lg border border-border">
           <table className="w-full text-sm">
             <thead className="bg-muted/40 text-left">
               <tr>
-                <th className="px-3 py-2">Detalle</th>
-                <th className="px-3 py-2 text-right">Mensual</th>
-                <th className="px-3 py-2 text-right">Anual</th>
+                <th className="px-3 py-2">Mes</th>
+                <th className="px-3 py-2 text-right">Bruto</th>
+                <th className="px-3 py-2 text-right">Beneficios gravados</th>
+                <th className="px-3 py-2 text-right">Beneficios no gravados</th>
+                <th className="px-3 py-2 text-right text-red-600">TSS</th>
+                <th className="px-3 py-2 text-right text-red-600">ISR</th>
+                <th className="px-3 py-2 text-right font-semibold">Neto</th>
               </tr>
             </thead>
             <tbody>
-              <tr className="border-t border-border">
-                <td className="px-3 py-2">Salario bruto</td>
-                <td className="px-3 py-2 text-right">{money(result.monthlyGross)}</td>
+              {monthlyRows.map((row) => (
+                <tr key={row.month} className="border-t border-border">
+                  <td className="px-3 py-2 font-medium">{row.month}</td>
+                  <td className="px-3 py-2 text-right">{money(row.grossIncome)}</td>
+                  <td className="px-3 py-2 text-right">{money(row.taxableExtras)}</td>
+                  <td className="px-3 py-2 text-right">{money(row.nonTaxableExtras)}</td>
+                  <td className="px-3 py-2 text-right text-red-600">-{money(row.tss)}</td>
+                  <td className="px-3 py-2 text-right text-red-600">-{money(row.isr)}</td>
+                  <td className="px-3 py-2 text-right font-semibold">{money(row.net)}</td>
+                </tr>
+              ))}
+              <tr className="border-t-2 border-primary/40 bg-primary/5 font-semibold">
+                <td className="px-3 py-2">Total anual</td>
                 <td className="px-3 py-2 text-right">{money(result.monthlyGross * 12)}</td>
-              </tr>
-              <tr className="border-t border-border">
-                <td className="px-3 py-2">Beneficios gravados</td>
-                <td className="px-3 py-2 text-right">{money(result.taxableExtrasMonthly)}</td>
                 <td className="px-3 py-2 text-right">{money(result.taxableExtrasMonthly * 12)}</td>
-              </tr>
-              <tr className="border-t border-border">
-                <td className="px-3 py-2">Beneficios no gravados</td>
-                <td className="px-3 py-2 text-right">{money(result.nonTaxableBenefitsMonthly)}</td>
                 <td className="px-3 py-2 text-right">{money(result.nonTaxableBenefitsMonthly * 12)}</td>
-              </tr>
-              <tr className="border-t border-border text-red-600">
-                <td className="px-3 py-2">TSS (AFP + SFS)</td>
-                <td className="px-3 py-2 text-right">-{money(result.tss.total)}</td>
-                <td className="px-3 py-2 text-right">-{money(result.tss.total * 12)}</td>
-              </tr>
-              <tr className="border-t border-border text-red-600">
-                <td className="px-3 py-2">ISR</td>
-                <td className="px-3 py-2 text-right">-{money(result.monthlyISR)}</td>
-                <td className="px-3 py-2 text-right">-{money(result.annualISR)}</td>
-              </tr>
-              <tr className="border-t border-border bg-primary/5 font-semibold">
-                <td className="px-3 py-2">Neto final</td>
-                <td className="px-3 py-2 text-right">{money(result.monthlyNet)}</td>
+                <td className="px-3 py-2 text-right text-red-600">-{money(result.tss.total * 12)}</td>
+                <td className="px-3 py-2 text-right text-red-600">-{money(result.annualISR)}</td>
                 <td className="px-3 py-2 text-right">{money(result.annualNet)}</td>
               </tr>
             </tbody>
@@ -136,34 +175,71 @@ export function NetSalaryPage() {
       </Card>
 
       <Card>
-        <h3 className="mb-2 font-semibold">Auto-detectar desde texto</h3>
-        <p className="mb-2 text-sm text-muted-foreground">Pega una oferta y extraemos salario y bono aproximado (fallback por reglas).</p>
-        <textarea
-          className="h-44 w-full rounded-md border border-input bg-background p-2 text-sm"
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-        />
-        <Button
-          className="mt-2"
-          onClick={() => {
-            const extracted = extractFromText(text);
-            if (extracted.salary) setGross(extracted.salary);
-            if (extracted.bonus) {
-              setBenefits((prev) => {
-                const next = [...prev];
-                const idx = next.findIndex((item) => item.name.toLowerCase().includes('bono'));
-                if (idx >= 0) {
-                  next[idx] = { ...next[idx], amount: extracted.bonus, taxable: true };
-                } else {
-                  next.push({ id: crypto.randomUUID(), name: 'Bono detectado', amount: extracted.bonus, taxable: true });
-                }
-                return next;
-              });
-            }
-          }}
-        >
-          Extraer datos
-        </Button>
+        <h3 className="font-semibold">Prestaciones estimadas (más claro e intuitivo)</h3>
+        <p className="mb-4 text-sm text-muted-foreground">Configura fechas y vacaciones pendientes para ver un estimado de renuncia o desahucio.</p>
+
+        <div className="grid gap-3 md:grid-cols-4">
+          <div>
+            <label className="text-sm font-medium">Fecha de inicio</label>
+            <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+          </div>
+          <div>
+            <label className="text-sm font-medium">Fecha de cálculo</label>
+            <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+          </div>
+          <div>
+            <label className="text-sm font-medium">Vacaciones pendientes</label>
+            <Input type="number" value={pendingVacationDays} onChange={(e) => setPendingVacationDays(Number(e.target.value) || 0)} />
+          </div>
+          <div className="rounded-lg border border-border bg-muted/20 p-3">
+            <p className="text-xs uppercase text-muted-foreground">Antigüedad aproximada</p>
+            <p className="mt-2 text-xl font-semibold">{tenureMonths.toFixed(1)} meses</p>
+          </div>
+        </div>
+
+        <div className="mt-4 overflow-x-auto rounded-lg border border-border">
+          <table className="w-full text-sm">
+            <thead className="bg-muted/40 text-left">
+              <tr>
+                <th className="px-3 py-2">Concepto</th>
+                <th className="px-3 py-2 text-right">Monto estimado</th>
+                <th className="px-3 py-2">Guía rápida</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr className="border-t border-border">
+                <td className="px-3 py-2">Vacaciones no disfrutadas</td>
+                <td className="px-3 py-2 text-right">{money(vacations.amount)}</td>
+                <td className="px-3 py-2 text-muted-foreground">Se paga por días pendientes al salario diario.</td>
+              </tr>
+              <tr className="border-t border-border">
+                <td className="px-3 py-2">Regalía proporcional</td>
+                <td className="px-3 py-2 text-right">{money(regaliaAmount)}</td>
+                <td className="px-3 py-2 text-muted-foreground">Corresponde al tiempo trabajado del año actual.</td>
+              </tr>
+              <tr className="border-t border-border">
+                <td className="px-3 py-2">Preaviso</td>
+                <td className="px-3 py-2 text-right">{money(noticeAmount)}</td>
+                <td className="px-3 py-2 text-muted-foreground">Aplica en escenario de terminación por empleador.</td>
+              </tr>
+              <tr className="border-t border-border">
+                <td className="px-3 py-2">Cesantía</td>
+                <td className="px-3 py-2 text-right">{money(severanceAmount)}</td>
+                <td className="px-3 py-2 text-muted-foreground">Depende de la antigüedad acumulada.</td>
+              </tr>
+              <tr className="border-t border-border bg-muted/20 font-semibold">
+                <td className="px-3 py-2">Total si renuncias</td>
+                <td className="px-3 py-2 text-right">{money(resignationEstimate)}</td>
+                <td className="px-3 py-2">Vacaciones + regalía</td>
+              </tr>
+              <tr className="border-t border-border bg-primary/5 font-semibold">
+                <td className="px-3 py-2">Total si te despiden</td>
+                <td className="px-3 py-2 text-right">{money(dismissalEstimate)}</td>
+                <td className="px-3 py-2">Incluye preaviso y cesantía.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </Card>
     </div>
   );
