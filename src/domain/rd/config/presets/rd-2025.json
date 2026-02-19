@@ -1,0 +1,29 @@
+{
+  "id": "rd-2025",
+  "year": 2025,
+  "currency": "DOP",
+  "tss": { "afpEmployeeRate": 0.0287, "sfsEmployeeRate": 0.0304, "maxContributionSalary": 344685 },
+  "isrBrackets": [
+    { "from": 0, "to": 416220, "rate": 0, "fixedFee": 0 },
+    { "from": 416220, "to": 624329, "rate": 0.15, "fixedFee": 0 },
+    { "from": 624329, "to": 867123, "rate": 0.2, "fixedFee": 31216 },
+    { "from": 867123, "to": null, "rate": 0.25, "fixedFee": 79776 }
+  ],
+  "labor": {
+    "vacationDaysPerYear": 14,
+    "noticeDaysByTenureMonths": [
+      { "minMonths": 0, "maxMonths": 3, "days": 0 },
+      { "minMonths": 3, "maxMonths": 6, "days": 7 },
+      { "minMonths": 6, "maxMonths": 12, "days": 14 },
+      { "minMonths": 12, "maxMonths": null, "days": 28 }
+    ],
+    "severanceDaysByTenureMonths": [
+      { "minMonths": 0, "maxMonths": 3, "daysPerYear": 0 },
+      { "minMonths": 3, "maxMonths": 6, "daysPerYear": 6 },
+      { "minMonths": 6, "maxMonths": 12, "daysPerYear": 13 },
+      { "minMonths": 12, "maxMonths": null, "daysPerYear": 21 }
+    ],
+    "regaliaMonthFactor": 12
+  },
+  "scoring": { "money": 0.55, "risk": 0.2, "growth": 0.15, "qol": 0.1, "defaultMode": "balanced" }
+}
