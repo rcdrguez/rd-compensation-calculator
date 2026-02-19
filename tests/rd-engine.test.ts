@@ -14,6 +14,13 @@ describe('rd engine', () => {
     expect(result.annualISR).toBeGreaterThanOrEqual(0);
   });
 
+  it('includes non-taxable benefits without raising ISR', () => {
+    const withoutNonTaxable = computeNet({ gross: 100000, frequency: 'monthly', benefitsMonthly: 5000, config });
+    const withNonTaxable = computeNet({ gross: 100000, frequency: 'monthly', benefitsMonthly: 5000, nonTaxableBenefitsMonthly: 5000, config });
+    expect(withNonTaxable.monthlyNet).toBeGreaterThan(withoutNonTaxable.monthlyNet);
+    expect(withNonTaxable.annualISR).toBe(withoutNonTaxable.annualISR);
+  });
+
   it('computes severance for tenure', () => {
     const amount = computeSeverance(24, 90000, config);
     expect(amount).toBeGreaterThan(0);
