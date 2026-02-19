@@ -26,10 +26,18 @@ export interface CompensationItem {
   amount?: number;
   multiplier?: number;
   percent?: number;
+  taxable?: boolean;
   vesting: 'immediate' | 'afterMonths' | 'prorated';
   vestingMonths?: number;
   probability?: number;
   tiers?: Array<{ minMonths: number; amount?: number; multiplier?: number; percent?: number }>;
+}
+
+export interface MonthlyCompensationAdjustment {
+  month: number;
+  name: string;
+  amount: number;
+  taxable?: boolean;
 }
 
 export interface Offer {
@@ -42,4 +50,5 @@ export interface Offer {
   qolScore: number;
   bonuses: CompensationItem[];
   benefits: CompensationItem[];
+  monthlyAdjustments?: MonthlyCompensationAdjustment[];
 }
